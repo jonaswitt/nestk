@@ -42,12 +42,13 @@ namespace ntk
 class KinectGrabber : public RGBDGrabber
 {
 public:
-  KinectGrabber()
+  KinectGrabber(int kinect_index = 0)
     : m_depth_transmitted(0),
       m_rgb_transmitted(0),
       f_ctx(0), f_dev(0),
       m_ir_mode(0),
-      m_dual_ir_rgb(0)
+      m_dual_ir_rgb(0),
+      kinect_index(kinect_index)
   {}
 
   /*! Connect with the Kinect device. */
@@ -81,6 +82,7 @@ private:
   freenect_device *f_dev;
   bool m_ir_mode;
   bool m_dual_ir_rgb;
+  int kinect_index;
 };
 
 } // ntk

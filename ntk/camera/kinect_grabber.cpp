@@ -112,7 +112,10 @@ namespace ntk
     if (freenect_init(&f_ctx, NULL) < 0)
       fatal_error("freenect_init() failed\n");
 
-    if (freenect_open_device(f_ctx, &f_dev, 0) < 0)
+    if (freenect_num_devices(f_ctx) <= kinect_index)
+      fatal_error("requested kinect index is unavailable\n");
+      
+    if (freenect_open_device(f_ctx, &f_dev, kinect_index) < 0)
       fatal_error("freenect_open_device() failed\n");
 
     freenect_set_user(f_dev, this);

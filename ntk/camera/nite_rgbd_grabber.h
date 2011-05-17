@@ -37,16 +37,20 @@ class BodyEventDetector;
 class NiteRGBDGrabber : public ntk::RGBDGrabber
 {
 public:
+    
+    static vector<string> *getAllKinectIDs(); 
+    static size_t getKinectCount(); 
 
-  NiteRGBDGrabber(string kinect_id) :
+  NiteRGBDGrabber(int kinect_index) :
     m_need_pose_to_calibrate(false),
     m_max_num_users(15),
     m_body_event_detector(0),
     m_high_resolution(false),
-    m_custom_bayer_decoding(true),
-    kinect_id(kinect_id)
-  {}
-
+    m_custom_bayer_decoding(true)
+  {
+      kinect_id = (*getAllKinectIDs())[kinect_index];
+  }
+    
   /*! Call it before starting the thread. */
   void initialize();
 

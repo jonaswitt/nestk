@@ -77,6 +77,36 @@ void NiteRGBDGrabber :: check_error(const XnStatus& status, const char* what) co
   }
 }
 
+size_t NiteRGBDGrabber::getKinectCount()
+{
+    return getAllKinectIDs()->size();
+}
+    
+vector<string> *NiteRGBDGrabber::getAllKinectIDs()
+{
+    static vector<string> *ids = NULL;
+    if (!ids) {
+        ids = new vector<string>();
+        
+        xn::Context context;
+        context.Init();
+        
+        xn::NodeInfoList device_node_info_list;     
+        XnStatus status = context.EnumerateProductionTrees(XN_NODE_TYPE_DEVICE, NULL, device_node_info_list); 
+        if (status == XN_STATUS_OK) {
+            for (xn::NodeInfoList::Iterator nodeIt = device_node_info_list.Begin(); nodeIt != device_node_info_list.End(); ++nodeIt) { 
+                const xn::NodeInfo& info = *nodeIt; 
+                string connection_string = info.GetCreationInfo(); 
+                
+                ids->push_back(connection_string);
+            }        
+        } 
+    }
+    
+    return ids;
+}
+
+    
 void NiteRGBDGrabber :: initialize()
 {
     xn::EnumerationErrors errors;    

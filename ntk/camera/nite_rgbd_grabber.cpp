@@ -23,6 +23,7 @@
 #include <ntk/gesture/body_event.h>
 #include <ntk/geometry/pose_3d.h>
 #include <XnVCircleDetector.h>
+#include <XnTypes.h>
 
 using namespace cv;
 using namespace ntk;
@@ -78,26 +79,56 @@ void NiteRGBDGrabber :: check_error(const XnStatus& status, const char* what) co
 
 void NiteRGBDGrabber :: initialize()
 {
-  const char* config_file = "config/NestkConfig.xml";
+    xn::EnumerationErrors errors;
+    
+    const char* config_file = "config/NestkConfig.xml";
+    XnStatus status = m_ni_context.InitFromXmlFile(config_file, &errors);
+    
+    if (status != XN_STATUS_OK) {
+        ntk_dbg(0) << "[ERROR] " << xnGetStatusString(status);
+        ntk_throw_exception("Could not initialize NITE. Check Log."
+                            "Most probable reasons are device not connected or no config/ directory"
+                            "in the current directory.");
+    }
 
-  xn::EnumerationErrors errors;
-  XnStatus status = m_ni_context.InitFromXmlFile(config_file, &errors);
-  if (status != XN_STATUS_OK)
-  {
-    ntk_dbg(0) << "[ERROR] " << xnGetStatusString(status);
-    ntk_throw_exception("Could not initialize NITE. Check Log."
-                        "Most probable reasons are device not connected or no config/ directory"
-                        "in the current directory.");
-  }
-
-  status = m_ni_context.FindExistingNode(XN_NODE_TYPE_DEPTH, m_ni_depth_generator);
-  check_error(status, "Find depth generator");
-
-  status = m_ni_context.FindExistingNode(XN_NODE_TYPE_USER, m_ni_user_generator);
-  check_error(status, "Find user generator");
-
-  status = m_ni_context.FindExistingNode(XN_NODE_TYPE_IMAGE, m_ni_rgb_generator);
-  check_error(status, "Find image generator");
+    // enumerate depth nodes: 
+    xn::NodeInfoList depth_node_info_list;     
+    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_DEPTH, NULL, depth_node_info_list, NULL); 
+    check_error(status, "depth enum");
+    for (xn::NodeInfoList::Iterator nodeIt = depth_node_info_list.Begin(); nodeIt != depth_node_info_list.End(); ++nodeIt) { 
+        const xn::NodeInfo& info = *nodeIt; 
+        if (info.GetInstanceName() != (string("Depth") + kinect_index))
+            continue;
+                
+        status = info.GetInstance(m_ni_depth_generator);
+        check_error(status, "create depth generator instance");
+    } 
+    
+    // enumerate rgb nodes: 
+    xn::NodeInfoList image_node_info_list; 
+    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_IMAGE, NULL, image_node_info_list, NULL); 
+    check_error(status, "image enum");
+    for (xn::NodeInfoList::Iterator nodeIt = image_node_info_list.Begin(); nodeIt != image_node_info_list.End(); ++nodeIt) { 
+        const xn::NodeInfo& info = *nodeIt; 
+        if (info.GetInstanceName() != (string("Image") + kinect_index))
+            continue;
+        
+        status = info.GetInstance(m_ni_rgb_generator);
+        check_error(status, "create rgb generator instance");
+    }  
+    
+    // enumerate user nodes: 
+    xn::NodeInfoList user_node_info_list; 
+    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_USER, NULL, user_node_info_list, NULL); 
+    check_error(status, "user enum");
+    for (xn::NodeInfoList::Iterator nodeIt = user_node_info_list.Begin(); nodeIt != user_node_info_list.End(); ++nodeIt) { 
+        const xn::NodeInfo& info = *nodeIt; 
+        if (info.GetInstanceName() != (string("User") + kinect_index))
+            continue;
+        
+        status = info.GetInstance(m_ni_user_generator);
+        check_error(status, "create user generator instance");
+    }  
 
   if (m_high_resolution)
   {

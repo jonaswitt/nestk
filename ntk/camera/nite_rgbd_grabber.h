@@ -37,12 +37,14 @@ class BodyEventDetector;
 class NiteRGBDGrabber : public ntk::RGBDGrabber
 {
 public:
-  NiteRGBDGrabber() :
+
+  NiteRGBDGrabber(string kinect_index = "") :
     m_need_pose_to_calibrate(false),
     m_max_num_users(15),
     m_body_event_detector(0),
     m_high_resolution(false),
-    m_custom_bayer_decoding(true)
+    m_custom_bayer_decoding(true),
+    kinect_index(kinect_index)
   {}
 
   /*! Call it before starting the thread. */
@@ -101,6 +103,7 @@ private:
   BodyEventDetector* m_body_event_detector;
   bool m_high_resolution;
   bool m_custom_bayer_decoding;
+  string kinect_index;  
 };
 
 } // ntk

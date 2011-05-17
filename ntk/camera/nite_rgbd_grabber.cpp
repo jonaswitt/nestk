@@ -79,10 +79,10 @@ void NiteRGBDGrabber :: check_error(const XnStatus& status, const char* what) co
 
 void NiteRGBDGrabber :: initialize()
 {
-    xn::EnumerationErrors errors;
+    xn::EnumerationErrors errors;    
+//    XnStatus status = m_ni_context.InitFromXmlFile(cfg.c_str(), &errors);
     
-    const char* config_file = "config/NestkConfig.xml";
-    XnStatus status = m_ni_context.InitFromXmlFile(config_file, &errors);
+    XnStatus status = m_ni_context.Init();
     
     if (status != XN_STATUS_OK) {
         ntk_dbg(0) << "[ERROR] " << xnGetStatusString(status);
@@ -90,45 +90,108 @@ void NiteRGBDGrabber :: initialize()
                             "Most probable reasons are device not connected or no config/ directory"
                             "in the current directory.");
     }
+    
+    XnLicense license;
+    strcpy(license.strKey, "0KOIk2JeIBYClPWVnMoRKn5cdY4=");
+    strcpy(license.strVendor, "PrimeSense");
+    status = m_ni_context.AddLicense(license);
+    check_error(status, "add license");
+        
+    // find device & set name: 
+    xn::Query devQuery;
+    devQuery.SetCreationInfo(kinect_id.c_str());
+    check_error(status, "set dev query creation info");
+
+    xn::NodeInfoList device_node_info_list;     
+    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_DEVICE, &devQuery, device_node_info_list, NULL); 
+    check_error(status, "device enum");
+    
+    xn::NodeInfoList::Iterator nodeIt = device_node_info_list.Begin();
+    xn::NodeInfo info(*nodeIt); 
+    status = info.SetInstanceName("Cam1");    
+    check_error(status, "set device name");
+
+    status = m_ni_context.CreateProductionTree(info);
+    check_error(status, "create device production tree");
+    
 
     // enumerate depth nodes: 
+    xn::Query depthQuery;
+    status = depthQuery.AddNeededNode("Cam1");
+    check_error(status, "set depth query needed node");
+
     xn::NodeInfoList depth_node_info_list;     
-    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_DEPTH, NULL, depth_node_info_list, NULL); 
+    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_DEPTH, &depthQuery, depth_node_info_list, NULL); 
     check_error(status, "depth enum");
-    for (xn::NodeInfoList::Iterator nodeIt = depth_node_info_list.Begin(); nodeIt != depth_node_info_list.End(); ++nodeIt) { 
-        const xn::NodeInfo& info = *nodeIt; 
-        if (info.GetInstanceName() != (string("Depth") + kinect_index))
-            continue;
-                
-        status = info.GetInstance(m_ni_depth_generator);
-        check_error(status, "create depth generator instance");
-    } 
+    nodeIt = depth_node_info_list.Begin();
+    info = xn::NodeInfo(*nodeIt);
+    
+    status = info.SetInstanceName("Depth1");    
+    check_error(status, "set depth name");
+        
+    status = m_ni_context.CreateProductionTree(info);
+    check_error(status, "create depth production tree");
+    
+
+
+    status = info.GetInstance(m_ni_depth_generator);
+    check_error(status, "create depth generator instance");
+
+    XnMapOutputMode mode;
+    mode.nXRes = 640;
+    mode.nYRes = 480;
+    mode.nFPS = 30;
+    
+    status = m_ni_depth_generator.SetMapOutputMode(mode);
+    check_error(status, "set depth map mode");
     
     // enumerate rgb nodes: 
     xn::NodeInfoList image_node_info_list; 
-    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_IMAGE, NULL, image_node_info_list, NULL); 
+    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_IMAGE, &depthQuery, image_node_info_list, NULL); 
     check_error(status, "image enum");
-    for (xn::NodeInfoList::Iterator nodeIt = image_node_info_list.Begin(); nodeIt != image_node_info_list.End(); ++nodeIt) { 
-        const xn::NodeInfo& info = *nodeIt; 
-        if (info.GetInstanceName() != (string("Image") + kinect_index))
-            continue;
-        
-        status = info.GetInstance(m_ni_rgb_generator);
-        check_error(status, "create rgb generator instance");
-    }  
+    nodeIt = image_node_info_list.Begin();
+    info = xn::NodeInfo(*nodeIt);
+    
+    status = info.SetInstanceName("Image1");    
+    check_error(status, "set image name");
+    
+    status = m_ni_context.CreateProductionTree(info);
+    check_error(status, "create image production tree");
+    
+    status = info.GetInstance(m_ni_rgb_generator);
+    check_error(status, "create image generator instance");
+    
+    XnMapOutputMode mode2;
+    mode2.nXRes = 640;
+    mode2.nYRes = 480;
+    mode2.nFPS = 30;
+    
+    status = m_ni_rgb_generator.SetMapOutputMode(mode2);
+    check_error(status, "set rgb map mode");
+
     
     // enumerate user nodes: 
     xn::NodeInfoList user_node_info_list; 
-    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_USER, NULL, user_node_info_list, NULL); 
+    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_USER, &depthQuery, user_node_info_list, NULL); 
     check_error(status, "user enum");
-    for (xn::NodeInfoList::Iterator nodeIt = user_node_info_list.Begin(); nodeIt != user_node_info_list.End(); ++nodeIt) { 
-        const xn::NodeInfo& info = *nodeIt; 
-        if (info.GetInstanceName() != (string("User") + kinect_index))
-            continue;
-        
-        status = info.GetInstance(m_ni_user_generator);
-        check_error(status, "create user generator instance");
-    }  
+    nodeIt = user_node_info_list.Begin();
+    info = xn::NodeInfo(*nodeIt);
+    
+    status = info.SetInstanceName("User1");    
+    check_error(status, "set user name");
+    
+    status = m_ni_context.CreateProductionTree(info);
+    check_error(status, "create user production tree");
+    
+    status = info.GetInstance(m_ni_user_generator);
+    check_error(status, "create user generator instance");
+    
+
+    
+    status = m_ni_context.StartGeneratingAll();
+    check_error(status, "StartGenerating");
+
+
 
   if (m_high_resolution)
   {

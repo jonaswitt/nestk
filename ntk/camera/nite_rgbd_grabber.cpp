@@ -199,24 +199,23 @@ void NiteRGBDGrabber :: initialize()
     status = m_ni_rgb_generator.SetMapOutputMode(mode2);
     check_error(status, "set rgb map mode");
 
-    
-    // enumerate user nodes: 
-    xn::NodeInfoList user_node_info_list; 
-    status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_USER, &depthQuery, user_node_info_list, NULL); 
-    check_error(status, "user enum");
-    nodeIt = user_node_info_list.Begin();
-    info = xn::NodeInfo(*nodeIt);
-    
-    status = info.SetInstanceName("User1");    
-    check_error(status, "set user name");
-    
-    status = m_ni_context.CreateProductionTree(info);
-    check_error(status, "create user production tree");
-    
-    status = info.GetInstance(m_ni_user_generator);
-    check_error(status, "create user generator instance");
-    
-
+    if (enable_skeleton_tracking) {
+        // enumerate user nodes: 
+        xn::NodeInfoList user_node_info_list; 
+        status = m_ni_context.EnumerateProductionTrees(XN_NODE_TYPE_USER, &depthQuery, user_node_info_list, NULL); 
+        check_error(status, "user enum");
+        nodeIt = user_node_info_list.Begin();
+        info = xn::NodeInfo(*nodeIt);
+        
+        status = info.SetInstanceName("User1");    
+        check_error(status, "set user name");
+        
+        status = m_ni_context.CreateProductionTree(info);
+        check_error(status, "create user production tree");
+        
+        status = info.GetInstance(m_ni_user_generator);
+        check_error(status, "create user generator instance");   
+    }
     
     status = m_ni_context.StartGeneratingAll();
     check_error(status, "StartGenerating");
@@ -245,26 +244,28 @@ void NiteRGBDGrabber :: initialize()
   ntk_ensure(m_ni_depth_generator.IsCapabilitySupported(XN_CAPABILITY_ALTERNATIVE_VIEW_POINT), "Cannot register images.");
   m_ni_depth_generator.GetAlternativeViewPointCap().SetViewPoint(m_ni_rgb_generator);
 
-  ntk_throw_exception_if(!m_ni_user_generator.IsCapabilitySupported(XN_CAPABILITY_SKELETON),
-                         "Supplied user generator doesn't support skeleton.");
-
-  XnCallbackHandle hUserCallbacks, hCalibrationCallbacks, hPoseCallbacks;
-  m_ni_user_generator.RegisterUserCallbacks(User_NewUser, User_LostUser, this, hUserCallbacks);
-  m_ni_user_generator.GetSkeletonCap().RegisterCalibrationCallbacks(UserCalibration_CalibrationStart, UserCalibration_CalibrationEnd, this, hCalibrationCallbacks);
-
-  if (m_ni_user_generator.GetSkeletonCap().NeedPoseForCalibration())
-  {
-    m_need_pose_to_calibrate = true;
-    if (!m_ni_user_generator.IsCapabilitySupported(XN_CAPABILITY_POSE_DETECTION))
-      ntk_throw_exception("Pose required, but not supported\n");
-    m_ni_user_generator.GetPoseDetectionCap().RegisterToPoseCallbacks(UserPose_PoseDetected, NULL, this, hPoseCallbacks);
-    m_ni_user_generator.GetSkeletonCap().GetCalibrationPose(m_calibration_pose);
-  }
-
-  m_ni_user_generator.GetSkeletonCap().SetSkeletonProfile(XN_SKEL_PROFILE_ALL);
-
-  if (m_body_event_detector)
-    m_body_event_detector->initialize(m_ni_context, m_ni_depth_generator);
+    if (enable_skeleton_tracking) {
+        ntk_throw_exception_if(!m_ni_user_generator.IsCapabilitySupported(XN_CAPABILITY_SKELETON),
+                               "Supplied user generator doesn't support skeleton.");
+        
+        XnCallbackHandle hUserCallbacks, hCalibrationCallbacks, hPoseCallbacks;
+        m_ni_user_generator.RegisterUserCallbacks(User_NewUser, User_LostUser, this, hUserCallbacks);
+        m_ni_user_generator.GetSkeletonCap().RegisterCalibrationCallbacks(UserCalibration_CalibrationStart, UserCalibration_CalibrationEnd, this, hCalibrationCallbacks);
+        
+        if (m_ni_user_generator.GetSkeletonCap().NeedPoseForCalibration())
+        {
+            m_need_pose_to_calibrate = true;
+            if (!m_ni_user_generator.IsCapabilitySupported(XN_CAPABILITY_POSE_DETECTION))
+                ntk_throw_exception("Pose required, but not supported\n");
+            m_ni_user_generator.GetPoseDetectionCap().RegisterToPoseCallbacks(UserPose_PoseDetected, NULL, this, hPoseCallbacks);
+            m_ni_user_generator.GetSkeletonCap().GetCalibrationPose(m_calibration_pose);
+        }
+        
+        m_ni_user_generator.GetSkeletonCap().SetSkeletonProfile(XN_SKEL_PROFILE_ALL);
+        
+        if (m_body_event_detector)
+            m_body_event_detector->initialize(m_ni_context, m_ni_depth_generator);        
+    }
 
   status = m_ni_context.StartGeneratingAll();
   check_error(status, "StartGenerating");
@@ -439,7 +440,8 @@ void NiteRGBDGrabber :: run()
       m_body_event_detector->update();
     m_ni_depth_generator.GetMetaData(depthMD);
     m_ni_rgb_generator.GetMetaData(rgbMD);
-    m_ni_user_generator.GetUserPixels(0, sceneMD);
+      if (enable_skeleton_tracking) 
+          m_ni_user_generator.GetUserPixels(0, sceneMD);
 
     const XnDepthPixel* pDepth = depthMD.Data();
     ntk_assert((depthMD.XRes() == m_current_image.rawDepth().cols)
@@ -471,27 +473,29 @@ void NiteRGBDGrabber :: run()
         }
     }
 
-    uchar* user_mask_ptr = m_current_image.userLabelsRef().ptr<uchar>();
-    const XnLabel* pLabel = sceneMD.Data();
-    for (int i = 0; i < sceneMD.XRes()*sceneMD.YRes(); ++i)
-    {
-      user_mask_ptr[i] = pLabel[i];
-    }
-
-    XnUserID user_ids[15];
-    XnUInt16 num_users = 15;
-    m_ni_user_generator.GetUsers(user_ids, num_users);
-
-    // FIXME: only one user supported.
-    for (int i = 0; i < num_users; ++i)
-    {
-      XnUserID user_id = user_ids[i];
-      if (m_ni_user_generator.GetSkeletonCap().IsTracking(user_id))
-      {
-        m_current_image.skeletonRef()->computeJoints(user_id, m_ni_user_generator, m_ni_depth_generator);
-        break;
+      if (enable_skeleton_tracking)  {
+          uchar* user_mask_ptr = m_current_image.userLabelsRef().ptr<uchar>();
+          const XnLabel* pLabel = sceneMD.Data();
+          for (int i = 0; i < sceneMD.XRes()*sceneMD.YRes(); ++i)
+          {
+              user_mask_ptr[i] = pLabel[i];
+          }
+          
+          XnUserID user_ids[15];
+          XnUInt16 num_users = 15;
+          m_ni_user_generator.GetUsers(user_ids, num_users);
+          
+          // FIXME: only one user supported.
+          for (int i = 0; i < num_users; ++i)
+          {
+              XnUserID user_id = user_ids[i];
+              if (m_ni_user_generator.GetSkeletonCap().IsTracking(user_id))
+              {
+                  m_current_image.skeletonRef()->computeJoints(user_id, m_ni_user_generator, m_ni_depth_generator);
+                  break;
+              }
+          }   
       }
-    }
 
     {
       QWriteLocker locker(&m_lock);
